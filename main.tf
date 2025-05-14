@@ -30,6 +30,17 @@ resource "azurerm_subnet" "subnet_db" {
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.2.0/24"]
+
+  delegation {
+    name = "mssqlManagedInstanceDelegation"
+    service_delegation {
+      name = "Microsoft.Sql/managedInstances"
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/action",
+      ]
+    }
+  }
+
 }
 
 resource "azurerm_subnet" "bastion" {
@@ -135,7 +146,7 @@ resource "azurerm_windows_virtual_machine" "vmwin" {
 
 #region Managed SQL Instance
 resource "azurerm_mssql_managed_instance" "instance" {
-  name                         = "${var.prefix}-db"
+  name                         = "${var.prefix}-mi"
   resource_group_name          = azurerm_resource_group.rg.name
   location                     = var.location
   administrator_login          = var.admin_username
@@ -148,7 +159,6 @@ resource "azurerm_mssql_managed_instance" "instance" {
   vcores             = 4
 }
 
-# databases
 resource "azurerm_mssql_managed_database" "databases" {
   name                = "${var.prefix}-db"
   managed_instance_id = azurerm_mssql_managed_instance.instance.id
