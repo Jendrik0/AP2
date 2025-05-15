@@ -18,6 +18,7 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = ["10.0.0.0/16"]
 }
 
+ # > Subnet Virtual Machines
 resource "azurerm_subnet" "subnet_vm" {
   name                 = "${var.prefix}-subnet-vm"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -25,6 +26,15 @@ resource "azurerm_subnet" "subnet_vm" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
+# > Subnet for Bastion
+resource "azurerm_subnet" "bastion" {
+  name                 = "AzureBastionSubnet"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.3.0/24"]
+}
+
+# > Subnet for Managed SQL Instance
 resource "azurerm_subnet" "subnet_db" {
   name                 = "${var.prefix}-subnet-db"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -32,22 +42,39 @@ resource "azurerm_subnet" "subnet_db" {
   address_prefixes     = ["10.0.2.0/24"]
 
   delegation {
-    name = "mssqlManagedInstanceDelegation"
+    name = "managedinstancedelegation"
+
     service_delegation {
       name = "Microsoft.Sql/managedInstances"
       actions = [
-        "Microsoft.Network/virtualNetworks/subnets/action",
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+        "Microsoft.Network/virtualNetworks/subnets/prepareNetworkPolicies/action",
+        "Microsoft.Network/virtualNetworks/subnets/unprepareNetworkPolicies/action"
       ]
     }
   }
-
 }
 
-resource "azurerm_subnet" "bastion" {
-  name                 = "AzureBastionSubnet"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.vnet.name
-  address_prefixes     = ["10.0.3.0/24"]
+# Associate subnet and the security group
+resource "azurerm_subnet_network_security_group_association" "subnet_nsg" {
+  subnet_id                 = azurerm_subnet.subnet_db.id
+  network_security_group_id = azurerm_network_security_group.netsec.id
+}
+
+
+# Create route table
+resource "azurerm_route_table" "rt" {
+  name                          = "${var.prefix}-route-table"
+  location                      = azurerm_resource_group.rg.location
+  resource_group_name           = azurerm_resource_group.rg.name
+}
+
+# Associate subnet and the route table
+resource "azurerm_subnet_route_table_association" "subnet_rt" {
+  subnet_id = azurerm_subnet.subnet_db.id
+  route_table_id = azurerm_route_table.rt.id
+
+  depends_on = [azurerm_subnet_network_security_group_association.subnet_nsg]
 }
 
 #region Azure Bastion
@@ -90,13 +117,14 @@ resource "azurerm_linux_virtual_machine" "vmlnx" {
   resource_group_name             = azurerm_resource_group.rg.name
   computer_name                   = "${var.prefix}-lnx"
   location                        = var.location
-  size                            = "D2as_v5"
+  size                            = "Standard_B2as_v2"
   disable_password_authentication = false
   admin_username                  = var.admin_username
   admin_password                  = var.admin_password
   network_interface_ids           = [azurerm_network_interface.vmnic-lnx.id]
 
   os_disk {
+    name                 = "${var.prefix}-osdisk-lnx"
     caching              = "ReadWrite"
     storage_account_type = "Standard_LRS"
   }
@@ -129,9 +157,10 @@ resource "azurerm_windows_virtual_machine" "vmwin" {
   resource_group_name   = azurerm_resource_group.rg.name
   computer_name         = "${var.prefix}-win"
   network_interface_ids = [azurerm_network_interface.vmnic-win.id]
-  size                  = "D2as_v5"
+  size                  = "Standard_B2as_v2"
 
   os_disk {
+    name                 = "${var.prefix}-osdisk-win"
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
   }
