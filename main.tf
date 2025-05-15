@@ -175,7 +175,7 @@ resource "azurerm_windows_virtual_machine" "vmwin" {
   }
 }
 
-#region Managed SQL Instance
+#region SQL Instance
 resource "azurerm_mssql_managed_instance" "mi" {
   name                         = "${var.prefix}-mi"
   resource_group_name          = azurerm_resource_group.rg.name
@@ -197,7 +197,7 @@ resource "azurerm_mssql_managed_database" "db" {
 }
 
 #region etc
-# Generate local password for resources
+# Generate password for resources
 resource "random_password" "password" {
   length      = 32
   min_lower   = 1
