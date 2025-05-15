@@ -5,12 +5,14 @@ resource "azurerm_resource_group" "rg" {
 }
 
 #region Network
+# Create a network security group
 resource "azurerm_network_security_group" "netsec" {
   name                = "${var.prefix}-nsg"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 }
 
+# Create Virtual Network
 resource "azurerm_virtual_network" "vnet" {
   name                = "${var.prefix}-vnet"
   location            = azurerm_resource_group.rg.location
@@ -18,7 +20,7 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = ["10.0.0.0/16"]
 }
 
- # > Subnet Virtual Machines
+# > Subnet Virtual Machines
 resource "azurerm_subnet" "subnet_vm" {
   name                 = "${var.prefix}-subnet-vm"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -61,17 +63,17 @@ resource "azurerm_subnet_network_security_group_association" "subnet_nsg" {
   network_security_group_id = azurerm_network_security_group.netsec.id
 }
 
-
 # Create route table
 resource "azurerm_route_table" "rt" {
-  name                          = "${var.prefix}-route-table"
-  location                      = azurerm_resource_group.rg.location
-  resource_group_name           = azurerm_resource_group.rg.name
+  name                = "${var.prefix}-route-table"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  bgp_route_propagation_enabled = true
 }
 
 # Associate subnet and the route table
 resource "azurerm_subnet_route_table_association" "subnet_rt" {
-  subnet_id = azurerm_subnet.subnet_db.id
+  subnet_id      = azurerm_subnet.subnet_db.id
   route_table_id = azurerm_route_table.rt.id
 
   depends_on = [azurerm_subnet_network_security_group_association.subnet_nsg]
@@ -120,7 +122,7 @@ resource "azurerm_linux_virtual_machine" "vmlnx" {
   size                            = "Standard_B2as_v2"
   disable_password_authentication = false
   admin_username                  = var.admin_username
-  admin_password                  = var.admin_password
+  admin_password                  = random_password.password.result
   network_interface_ids           = [azurerm_network_interface.vmnic-lnx.id]
 
   os_disk {
@@ -152,7 +154,7 @@ resource "azurerm_network_interface" "vmnic-win" {
 resource "azurerm_windows_virtual_machine" "vmwin" {
   name                  = "${var.prefix}-win"
   admin_username        = var.admin_username
-  admin_password        = var.admin_password
+  admin_password        = random_password.password.result
   location              = var.location
   resource_group_name   = azurerm_resource_group.rg.name
   computer_name         = "${var.prefix}-win"
@@ -174,21 +176,33 @@ resource "azurerm_windows_virtual_machine" "vmwin" {
 }
 
 #region Managed SQL Instance
-resource "azurerm_mssql_managed_instance" "instance" {
+resource "azurerm_mssql_managed_instance" "mi" {
   name                         = "${var.prefix}-mi"
   resource_group_name          = azurerm_resource_group.rg.name
   location                     = var.location
   administrator_login          = var.admin_username
-  administrator_login_password = var.admin_password
+  administrator_login_password = random_password.password.result
+  license_type                 = "BasePrice"
+  sku_name                     = "GP_Gen5"
+  storage_size_in_gb           = 32
+  subnet_id                    = azurerm_subnet.subnet_db.id
+  vcores                       = 4
 
-  license_type       = "BasePrice"
-  sku_name           = "GP_Gen5"
-  storage_size_in_gb = 32
-  subnet_id          = azurerm_subnet.subnet_db.id
-  vcores             = 4
+  depends_on = [azurerm_subnet_route_table_association.subnet_rt]
 }
 
-resource "azurerm_mssql_managed_database" "databases" {
+resource "azurerm_mssql_managed_database" "db" {
   name                = "${var.prefix}-db"
-  managed_instance_id = azurerm_mssql_managed_instance.instance.id
+  managed_instance_id = azurerm_mssql_managed_instance.mi.id
+}
+
+#region etc
+# Generate local password for resources
+resource "random_password" "password" {
+  length      = 32
+  min_lower   = 1
+  min_upper   = 1
+  min_numeric = 1
+  min_special = 1
+  special     = true
 }
