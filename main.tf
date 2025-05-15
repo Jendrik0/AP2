@@ -119,7 +119,7 @@ resource "azurerm_linux_virtual_machine" "vmlnx" {
   resource_group_name             = azurerm_resource_group.rg.name
   computer_name                   = "${var.prefix}-lnx"
   location                        = var.location
-  size                            = "Standard_B2as_v2"
+  size                            = "Standard_B4as_v2"
   disable_password_authentication = false
   admin_username                  = var.admin_username
   admin_password                  = random_password.password.result
@@ -159,7 +159,7 @@ resource "azurerm_windows_virtual_machine" "vmwin" {
   resource_group_name   = azurerm_resource_group.rg.name
   computer_name         = "${var.prefix}-win"
   network_interface_ids = [azurerm_network_interface.vmnic-win.id]
-  size                  = "Standard_B2as_v2"
+  size                  = "Standard_B4as_v2"
 
   os_disk {
     name                 = "${var.prefix}-osdisk-win"
@@ -193,6 +193,11 @@ resource "azurerm_mssql_managed_instance" "mi" {
 
 resource "azurerm_mssql_managed_database" "db" {
   name                = "${var.prefix}-db"
+  managed_instance_id = azurerm_mssql_managed_instance.mi.id
+}
+
+resource "azurerm_mssql_managed_database" "db-NEW" {
+  name                = "${var.prefix}-db-NEW"
   managed_instance_id = azurerm_mssql_managed_instance.mi.id
 }
 
